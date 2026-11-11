@@ -1,0 +1,53 @@
+{
+  "name": "Devis Archiver - Error Notifier",
+  "nodes": [
+    {
+      "id": "1a2bcf45-9e58-47e7-84dd-0cce25137c2f",
+      "name": "On Workflow Error",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "c5a238ce-ed76-40c3-a145-47dc203d433c",
+      "name": "Notify Discord",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://discord.com/api/webhooks/VOTRE_WEBHOOK_ICI",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { content: \"Erreur dans le workflow **\" + $json.workflow.name + \"**\\nNœud : \" + ($json.execution.lastNodeExecuted || \"inconnu\") + \"\\nErreur : \" + (($json.execution.error && $json.execution.error.message) || \"inconnue\") + \"\\nExécution : \" + $json.execution.url } }}"
+      }
+    }
+  ],
+  "connections": {
+    "On Workflow Error": {
+      "main": [
+        [
+          {
+            "node": "Notify Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

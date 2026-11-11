@@ -1,0 +1,870 @@
+{
+  "name": "Customer Ticket Email to Drive Storage",
+  "nodes": [
+    {
+      "id": "550cebe6-86c6-4313-b697-75d22ede1f56",
+      "name": "New Devis Email",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "mailbox": "INBOX",
+        "postProcessAction": "read",
+        "format": "simple",
+        "downloadAttachments": true,
+        "dataPropertyAttachmentsPrefixName": "attachment_",
+        "options": {
+          "customEmailConfig": "[\"UNSEEN\",[\"HEADER\",\"SUBJECT\",\"Devis\"]]"
+        }
+      },
+      "credentials": {
+        "imap": {
+          "id": "vhNMR6mIQoG2UkQC",
+          "name": "IMAP account"
+        }
+      }
+    },
+    {
+      "id": "d3a35c92-33c6-4f97-9c28-7f2a989ed497",
+      "name": "Prepare Ticket File",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "date-prefix",
+              "name": "datePrefix",
+              "type": "string",
+              "value": "={{ (new Date($json.date || Date.now()).toISOString().substring(0, 10)) }}"
+            },
+            {
+              "id": "sender-name",
+              "name": "senderName",
+              "type": "string",
+              "value": "={{ (($json.from?.value?.[0] && ($json.from.value[0].name || $json.from.value[0].address)) || (typeof $json.from === 'string' ? $json.from : 'unknown')).replace(/<[^>]*>/g, '').replace(/[^\\w\\-]+/g, '_') }}"
+            },
+            {
+              "id": "subject-clean",
+              "name": "subjectClean",
+              "type": "string",
+              "value": "={{ ((typeof $json.subject === 'string' ? $json.subject : ($json.subject?.text || 'no-subject'))).replace(/[^\\w\\-]+/g, '_').substring(0, 60) }}"
+            },
+            {
+              "id": "month-folder",
+              "name": "monthFolder",
+              "type": "string",
+              "value": "={{ (new Date($json.date || Date.now()).toISOString().substring(0, 7)) }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "0ff4dcdf-3acc-4b29-ae84-b45a199580a9",
+      "name": "Find Devis Folder",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        672,
+        192
+      ],
+      "parameters": {
+        "resource": "fileFolder",
+        "operation": "search",
+        "searchMethod": "name",
+        "queryString": "Devis",
+        "filter": {
+          "driveId": {
+            "__rl": true,
+            "mode": "list",
+            "value": "My Drive"
+          },
+          "folderId": {
+            "__rl": true,
+            "mode": "list",
+            "value": "root",
+            "cachedResultName": "/ (Root folder)"
+          },
+          "whatToSearch": "folders"
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "JDs1vLhCiHAQcTwX",
+          "name": "Google Drive account"
+        }
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "id": "9c492942-78ac-489f-a92f-839c6f0697b4",
+      "name": "Devis Folder Exists",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        896,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "folder-found",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "3b28d665-99c0-476e-bb29-ec5d82775642",
+      "name": "Devis Parent Folder",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1344,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "parent-id",
+              "name": "devisFolderId",
+              "type": "string",
+              "value": "={{ ($('Find Devis Folder').first().json.id || $('Create Devis Folder').first().json.id) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "a766c517-c3ca-49c1-8bac-389389c7a9e9",
+      "name": "Find Month Folder",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1568,
+        0
+      ],
+      "parameters": {
+        "resource": "fileFolder",
+        "operation": "search",
+        "searchMethod": "name",
+        "queryString": "={{ $('Prepare Ticket File').first().json.monthFolder }}",
+        "filter": {
+          "driveId": {
+            "__rl": true,
+            "mode": "list",
+            "value": "My Drive"
+          },
+          "folderId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('Devis Parent Folder').first().json.devisFolderId }}"
+          },
+          "whatToSearch": "folders"
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "JDs1vLhCiHAQcTwX",
+          "name": "Google Drive account"
+        }
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "id": "370e80b4-d2cb-43c1-a48a-238be69b32a4",
+      "name": "Month Folder Exists",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1792,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "folder-found",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "95089091-67a3-4598-8c77-31d31e86a4c5",
+      "name": "Month Folder Id",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2240,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "month-id",
+              "name": "monthFolderId",
+              "type": "string",
+              "value": "={{ ($('Find Month Folder').first().json.id || $('Create Month Folder').first().json.id) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "0465d184-4dd9-43bb-b8b6-7625e1fdbad4",
+      "name": "List PDF Attachments",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2464,
+        192
+      ],
+      "parameters": {
+        "jsCode": "const src = $('Prepare Ticket File').first();\nconst json = src.json;\nfunction binOf(n){ try { return $(n).first().binary || {}; } catch(e){ return {}; } }\nconst bin = Object.assign({}, binOf('New Devis Email'), binOf('New Devis Email Archive'), (src.binary || {}));\nconst base = (json.datePrefix + '_' + json.senderName + '_' + json.subjectClean).substring(0, 80);\nconst out = [];\nfor (const key of Object.keys(bin)) {\n  const b = bin[key];\n  const orig = b.fileName || key;\n  const isPdf = b.mimeType === 'application/pdf' || orig.toLowerCase().endsWith('.pdf');\n  if (!isPdf) continue;\n  out.push({ json: { fileName: base + '_' + orig.replace(/[^\\w\\-.]+/g, '_'), attachmentKey: key, originalName: orig } });\n}\nif (out.length === 0) return [{ json: { noPdf: true, attachmentKeys: Object.keys(bin), attachmentTypes: Object.keys(bin).map(k => (bin[k].mimeType || '?') + ':' + (bin[k].fileName || k)) } }];\nreturn out;"
+      }
+    },
+    {
+      "id": "2929387c-f268-4c0a-8438-08cd7450e8a0",
+      "name": "Has PDF",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2688,
+        384
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "has-pdf",
+              "leftValue": "={{ $json.fileName }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "8cc51b77-1b80-4029-b5ff-ad245f2f4c7b",
+      "name": "Check File Exists",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        2464,
+        0
+      ],
+      "parameters": {
+        "resource": "fileFolder",
+        "operation": "search",
+        "searchMethod": "name",
+        "queryString": "={{ $json.fileName }}",
+        "filter": {
+          "driveId": {
+            "__rl": true,
+            "mode": "list",
+            "value": "My Drive"
+          },
+          "folderId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('Month Folder Id').first().json.monthFolderId }}"
+          },
+          "whatToSearch": "files"
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "JDs1vLhCiHAQcTwX",
+          "name": "Google Drive account"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "989ad090-8abc-4788-b221-21b0c1c5ae7e",
+      "name": "Is New File",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2688,
+        192
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "not-archived",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "1edf5393-ca50-41fc-b69b-df776f82668b",
+      "name": "Extract PDF",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3360,
+        -176
+      ],
+      "parameters": {
+        "jsCode": "const src = $('Prepare Ticket File').first();\nconst key = $('List PDF Attachments').item.json.attachmentKey;\nfunction binOf(n){ try { return $(n).first().binary || {}; } catch(e){ return {}; } }\nconst allBin = Object.assign({}, binOf('New Devis Email'), binOf('New Devis Email Archive'), (src.binary || {}));\nconst b = allBin[key];\nif (!b) return [];\nreturn [{ json: { fileName: $('List PDF Attachments').item.json.fileName }, binary: { data: b } }];"
+      }
+    },
+    {
+      "id": "4f948800-2c0a-48dc-9a59-388c106ca2b4",
+      "name": "Save Ticket in Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "upload",
+        "inputDataFieldName": "data",
+        "name": "={{ $('Extract PDF').item.json.fileName }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $('Month Folder Id').first().json.monthFolderId }}",
+          "mode": "id"
+        }
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "JDs1vLhCiHAQcTwX",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "id": "aa914ea7-493e-4bc6-8bff-c312e359d850",
+      "name": "Notify Discord",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        2688,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://discord.com/api/webhooks/VOTRE_WEBHOOK_ICI",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { content: 'Nouveau devis archivé : ' + ($json.name || $('Extract PDF').item.json.fileName) + '\\nLien : ' + ($json.webViewLink || '') } }}"
+      }
+    },
+    {
+      "id": "dac7fda4-e7a6-4e2f-acb1-b5bcc4e1e5a0",
+      "name": "Skip Duplicate",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3584,
+        96
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "aa9f33bb-6fbc-46ca-a598-b043ffb78bd2",
+      "name": "Skip No PDF",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3808,
+        208
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "39742601-7caa-4959-8596-b410073ce6bc",
+      "name": "Create Month Folder",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        2016,
+        80
+      ],
+      "parameters": {
+        "resource": "folder",
+        "operation": "create",
+        "name": "={{ $('Prepare Ticket File').first().json.monthFolder }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Devis Parent Folder').first().json.devisFolderId }}"
+        }
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "JDs1vLhCiHAQcTwX",
+          "name": "Google Drive account"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "73ca878e-b40a-4be7-b48a-9a0b7835f58b",
+      "name": "Create Devis Folder",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1120,
+        80
+      ],
+      "parameters": {
+        "resource": "folder",
+        "operation": "create",
+        "name": "Devis",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "root",
+          "cachedResultName": "/ (Root folder)"
+        }
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "JDs1vLhCiHAQcTwX",
+          "name": "Google Drive account"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "0b3cfac0-48e1-4dbc-9e53-c275852c9bc7",
+      "name": "Loop Emails",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        0,
+        384
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "8e318780-5312-4bfe-a297-a416e80419cb",
+      "name": "New Devis Email Archive",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        192
+      ],
+      "parameters": {
+        "mailbox": "INBOX.Archive",
+        "postProcessAction": "read",
+        "format": "simple",
+        "downloadAttachments": true,
+        "dataPropertyAttachmentsPrefixName": "attachment_",
+        "options": {
+          "customEmailConfig": "[\"UNSEEN\",[\"HEADER\",\"SUBJECT\",\"Devis\"]]"
+        }
+      },
+      "credentials": {
+        "imap": {
+          "id": "vhNMR6mIQoG2UkQC",
+          "name": "IMAP account"
+        }
+      }
+    },
+    {
+      "id": "00f49b47-bb1f-4497-808d-4ae40d65f9b1",
+      "name": "Archive Done",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        3808,
+        96
+      ],
+      "parameters": {
+        "mode": "chooseBranch",
+        "output": "empty"
+      }
+    }
+  ],
+  "connections": {
+    "New Devis Email": {
+      "main": [
+        [
+          {
+            "node": "Loop Emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Ticket File": {
+      "main": [
+        [
+          {
+            "node": "Find Devis Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Devis Folder": {
+      "main": [
+        [
+          {
+            "node": "Devis Folder Exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Devis Folder Exists": {
+      "main": [
+        [
+          {
+            "node": "Devis Parent Folder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Devis Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Devis Parent Folder": {
+      "main": [
+        [
+          {
+            "node": "Find Month Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Month Folder": {
+      "main": [
+        [
+          {
+            "node": "Month Folder Exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Month Folder Exists": {
+      "main": [
+        [
+          {
+            "node": "Month Folder Id",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Month Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Month Folder Id": {
+      "main": [
+        [
+          {
+            "node": "List PDF Attachments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List PDF Attachments": {
+      "main": [
+        [
+          {
+            "node": "Has PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has PDF": {
+      "main": [
+        [
+          {
+            "node": "Check File Exists",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip No PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check File Exists": {
+      "main": [
+        [
+          {
+            "node": "Is New File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is New File": {
+      "main": [
+        [
+          {
+            "node": "Extract PDF",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip Duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract PDF": {
+      "main": [
+        [
+          {
+            "node": "Save Ticket in Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Ticket in Drive": {
+      "main": [
+        [
+          {
+            "node": "Notify Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Discord": {
+      "main": [
+        [
+          {
+            "node": "Archive Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip Duplicate": {
+      "main": [
+        [
+          {
+            "node": "Archive Done",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Skip No PDF": {
+      "main": [
+        [
+          {
+            "node": "Archive Done",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Create Month Folder": {
+      "main": [
+        [
+          {
+            "node": "Month Folder Id",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Devis Folder": {
+      "main": [
+        [
+          {
+            "node": "Devis Parent Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Emails": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Prepare Ticket File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New Devis Email Archive": {
+      "main": [
+        [
+          {
+            "node": "Loop Emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Archive Done": {
+      "main": [
+        [
+          {
+            "node": "Loop Emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "9Li4MQd4EUck38z4"
+  },
+  "staticData": {
+    "node:New Devis Email Archive": {
+      "lastMessageUid": 2
+    },
+    "node:New Devis Email": {
+      "lastMessageUid": 27
+    }
+  },
+  "pinData": {},
+  "triggerCount": 2,
+  "meta": null
+}
